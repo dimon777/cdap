@@ -38,7 +38,7 @@ import co.cask.cdap.data2.metadata.indexer.Indexer;
 import co.cask.cdap.data2.metadata.indexer.InvertedTimeIndexer;
 import co.cask.cdap.data2.metadata.indexer.InvertedValueIndexer;
 import co.cask.cdap.data2.metadata.indexer.MetadataEntityTypeIndexer;
-import co.cask.cdap.data2.metadata.indexer.ParentIndexer;
+import co.cask.cdap.data2.metadata.indexer.NearestKnownAncestorIndexer;
 import co.cask.cdap.data2.metadata.indexer.SchemaIndexer;
 import co.cask.cdap.data2.metadata.indexer.ValueOnlyIndexer;
 import co.cask.cdap.data2.metadata.system.AbstractSystemMetadataWriter;
@@ -302,8 +302,8 @@ public class MetadataDataset extends AbstractDataset {
   }
 
   @VisibleForTesting
-  void addTags(MetadataEntity entity, String ... tags) {
-    addTags(entity, Sets.newHashSet(tags));
+  MetadataChange addTags(MetadataEntity entity, String ... tags) {
+    return addTags(entity, Sets.newHashSet(tags));
   }
 
   /**
@@ -1022,8 +1022,17 @@ public class MetadataDataset extends AbstractDataset {
     // get existing metadata
     Metadata existingMetadata = getMetadata(metadataEntry.getMetadataEntity());
     Set<Indexer> indexersForKey;
-    // tags are always rewritten as a defined property key 'tag' so it is necessary that we always generate
-    // indexes which are needed is this was first key-value metadata
+    // existingMetadata is a Metadata object containing key-value properties and list of tags. We need to determine if
+    // we are writing this entity for the first time in our metadata store as there is some special indexes which we
+    // generate for the entity itself and this does not need to be regenerated for every metadata record for a
+    // particular entity to minimize writes.
+    // We use the current metadata information to determine if we have any record for this entity in the store or not.
+    // If we have some properties then we can definitely say we have some metadata record for this
+    // entity and hence there is no need for indexing with new entity indexers. We always index with new entity
+    // indexers even if there might be some tags as tags update happens as combined action of deleting tags
+    // (which will delete all indexes) and rewriting the tag as new record. In case of existing tag an optimization
+    // can be made to check if the new metadata being written is properties or tags as in case of properties we will
+    // not need include new entity indexes but keep the code cleaner we avoid that conditional check here.
     if (existingMetadata.getProperties().isEmpty()) {
       indexersForKey = getIndexersForKey(metadataEntry.getKey(), true);
     } else {
@@ -1076,10 +1085,10 @@ public class MetadataDataset extends AbstractDataset {
   /**
    * Returns all the {@link Indexer indexers} that apply to a specified metadata key.
    * @param key the metadata key
-   * @param includeFirstRecordIndexers whether to include indexers which should be used only if this is the first
-   * time a metadata is being stored for the given metadata entity
+   * @param isNewEntity whether to include indexers which should be used only if this is the first
+   * time a metadata record is being stored for the given metadata entity
    */
-  private Set<Indexer> getIndexersForKey(String key, boolean includeFirstRecordIndexers) {
+  private Set<Indexer> getIndexersForKey(String key, boolean isNewEntity) {
     Set<Indexer> indexers = new HashSet<>();
     // for known keys in system scope, return appropriate indexers
     if (MetadataScope.SYSTEM == scope && SYSTEM_METADATA_KEY_TO_INDEXERS.containsKey(key)) {
@@ -1087,8 +1096,8 @@ public class MetadataDataset extends AbstractDataset {
     } else {
       indexers.addAll(DEFAULT_INDEXERS);
     }
-    if (includeFirstRecordIndexers) {
-      indexers.add(new ParentIndexer());
+    if (isNewEntity) {
+      indexers.add(new NearestKnownAncestorIndexer());
       indexers.add(new MetadataEntityTypeIndexer());
     }
     return indexers;

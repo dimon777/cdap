@@ -20,24 +20,30 @@ import co.cask.cdap.api.metadata.MetadataEntity;
 import co.cask.cdap.data2.metadata.dataset.MetadataDataset;
 import co.cask.cdap.data2.metadata.dataset.MetadataEntry;
 import co.cask.cdap.data2.metadata.dataset.SortInfo;
+import co.cask.cdap.proto.element.EntityType;
 import co.cask.cdap.proto.id.EntityId;
 
 import java.util.HashSet;
 import java.util.Set;
 
 /**
- * Indexer used to index a {@link MetadataEntity} with it's parent. The parent is determined by
- * {@link EntityId#getSelfOrParentEntityId(MetadataEntity)}.
+ * Indexer used to index a custom {@link MetadataEntity} with it's nearest known ancestor.
+ * A nearest known ancestor is defined as the nearest known {@link EntityType} in the hierarchy which is determined by
+ * {@link EntityId#getNearestKnownEntity(MetadataEntity)}. If the given {@link MetadataEntity} if not a custom
+ * entity and is a know CDAP entity then no indexes are generated but this indexer.
  */
-public class ParentIndexer implements Indexer {
+public class NearestKnownAncestorIndexer implements Indexer {
 
-  public static final String PARENT_KEY = "parent_entity";
+  public static final String PARENT_KEY = "nearest_known_entity";
 
   @Override
   public Set<String> getIndexes(MetadataEntry entry) {
     Set<String> indexes = new HashSet<>();
-    EntityId selfOrParentEntityId = EntityId.getSelfOrParentEntityId(entry.getMetadataEntity());
-    indexes.add(PARENT_KEY + MetadataDataset.KEYVALUE_SEPARATOR + selfOrParentEntityId);
+    EntityId selfOrParentEntityId = EntityId.getNearestKnownEntity(entry.getMetadataEntity());
+    // if the entity is custom entity then only we want to generate the last known nearest custom index
+    if (!selfOrParentEntityId.getEntityType().toString().equalsIgnoreCase(entry.getMetadataEntity().getType())) {
+      indexes.add(PARENT_KEY + MetadataDataset.KEYVALUE_SEPARATOR + selfOrParentEntityId);
+    }
     return indexes;
   }
 
