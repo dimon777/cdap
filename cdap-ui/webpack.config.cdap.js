@@ -18,21 +18,22 @@ var webpack = require('webpack');
 var CopyWebpackPlugin = require('copy-webpack-plugin');
 var path = require('path');
 var LiveReloadPlugin = require('webpack-livereload-plugin');
-var LodashModuleReplacementPlugin = require('lodash-webpack-plugin');
 var HtmlWebpackPlugin = require('html-webpack-plugin');
 var StyleLintPlugin = require('stylelint-webpack-plugin');
 var CaseSensitivePathsPlugin = require('case-sensitive-paths-webpack-plugin');
 var uuidV4 = require('uuid/v4');
 var UglifyJsPlugin = require('uglifyjs-webpack-plugin');
 const CleanWebpackPlugin = require('clean-webpack-plugin');
+var ForkTsCheckerWebpackPlugin = require("fork-ts-checker-webpack-plugin");
+var LodashModuleReplacementPlugin = require('lodash-webpack-plugin');
 let pathsToClean = [
   'cdap_dist'
 ];
 
 // the clean options to use
 let cleanOptions = {
-  verbose:  true,
-  dry:      false
+  verbose: true,
+  dry: false
 };
 
 var mode = process.env.NODE_ENV || 'production';
@@ -55,14 +56,14 @@ const getWebpackDllPlugins = (mode) => {
   ];
 };
 var plugins = [
-  new CleanWebpackPlugin(pathsToClean, cleanOptions),
-  new CaseSensitivePathsPlugin(),
-  ...getWebpackDllPlugins(),
   new LodashModuleReplacementPlugin({
     shorthands: true,
     collections: true,
     caching: true
   }),
+  new CleanWebpackPlugin(pathsToClean, cleanOptions),
+  new CaseSensitivePathsPlugin(),
+  ...getWebpackDllPlugins(),
   new CopyWebpackPlugin([
     {
       from: './styles/fonts',
@@ -87,9 +88,14 @@ var plugins = [
     filename: 'cdap.html',
     hash: true,
     hashId: uuidV4()
-  })
+  }),
+  new ForkTsCheckerWebpackPlugin({
+    tsconfig: __dirname + '/tsconfig.json',
+    tslint: __dirname + '/tslint.json',
+    // watch: ["./app/cdap"], // optional but improves performance (less stat calls)
+    memoryLimit: 4096
+  }),
 ];
-
 
 var rules = [
   {
@@ -106,10 +112,6 @@ var rules = [
     use: 'yml-loader'
   },
   {
-    test: /\.json$/,
-    use: 'json-loader'
-  },
-  {
     test: /\.css$/,
     use: [
       'style-loader',
@@ -119,23 +121,27 @@ var rules = [
     ]
   },
   {
-    enforce: 'pre',
     test: /\.js$/,
-    use: 'eslint-loader',
+    use: ['babel-loader'],
     exclude: [
       /node_modules/,
-      /bower_components/,
-      /dist/,
-      /old_dist/,
-      /cdap_dist/,
-      /common_dist/,
-      /lib/,
-      /wrangler_dist/
+      /lib/
+    ],
+    include: [
+      path.join(__dirname, 'app')
     ]
   },
   {
-    test: /\.js$/,
-    use: 'babel-loader',
+    test: /\.tsx$/,
+    use: [
+      {
+        loader: 'ts-loader',
+        options: {
+          transpileOnly: true
+        }
+      },
+      'babel-loader'
+    ],
     exclude: [
       /node_modules/,
       /lib/
@@ -204,18 +210,17 @@ if (mode === 'development') {
 
 
 var webpackConfig = {
-  cache: true,
+  mode,
   context: __dirname + '/app/cdap',
   entry: {
-    // including babel-polyfill is temporary as of now. Once babel handles adding https://github.com/babel/babel/issues/4169.
-    'cdap': ['babel-polyfill', './cdap.js']
+    'cdap': ['@babel/polyfill', './cdap.js']
   },
   module: {
     rules
   },
   output: {
-    filename: '[name].js',
-    chunkFilename: '[name]-[chunkhash].js',
+    filename: '[name].[chunkhash].js',
+    chunkFilename: '[name].[chunkhash].js',
     path: __dirname + '/cdap_dist/cdap_assets/',
     publicPath: '/cdap_assets/'
   },
@@ -224,7 +229,12 @@ var webpackConfig = {
     chunkModules: false
   },
   plugins: plugins,
+  // TODO: Need to investigate this more.
+  optimization: {
+    splitChunks: false
+  },
   resolve: {
+    extensions: ['.ts', '.tsx', '.js', '.jsx'],
     alias: {
       components: __dirname + '/app/cdap/components',
       services: __dirname + '/app/cdap/services',
@@ -234,11 +244,5 @@ var webpackConfig = {
     }
   }
 };
-
-if (mode === 'development') {
-  webpackConfig = Object.assign({}, webpackConfig, {
-    devtool: 'source-map'
-  });
-}
 
 module.exports = webpackConfig;

@@ -20,17 +20,25 @@ var path = require('path');
 var HtmlWebpackPlugin = require('html-webpack-plugin');
 var CaseSensitivePathsPlugin = require('case-sensitive-paths-webpack-plugin');
 const CleanWebpackPlugin = require('clean-webpack-plugin');
+var ForkTsCheckerWebpackPlugin = require("fork-ts-checker-webpack-plugin");
+var LodashModuleReplacementPlugin = require('lodash-webpack-plugin');
+var UglifyJsPlugin = require('uglifyjs-webpack-plugin');
 let pathsToClean = [
   'login_dist'
 ];
 
 // the clean options to use
 let cleanOptions = {
-  verbose:  true,
-  dry:      false
+  verbose: true,
+  dry: false
 };
 
 var plugins = [
+  new LodashModuleReplacementPlugin({
+    shorthands: true,
+    collections: true,
+    caching: true
+  }),
   new CleanWebpackPlugin(pathsToClean, cleanOptions),
   new CaseSensitivePathsPlugin(),
   new webpack.DllReferencePlugin({
@@ -56,7 +64,13 @@ var plugins = [
   new StyleLintPlugin({
     syntax: 'scss',
     files: ['**/*.scss']
-  })
+  }),
+  new ForkTsCheckerWebpackPlugin({
+    tsconfig: __dirname + '/tsconfig.json',
+    tslint: __dirname + '/tslint.json',
+    // watch: ["./app/cdap"], // optional but improves performance (less stat calls)
+    memoryLimit: 4096
+  }),
 ];
 var mode = process.env.NODE_ENV;
 var rules = [
@@ -78,19 +92,6 @@ var rules = [
       'style-loader',
       'css-loader',
       'sass-loader'
-    ]
-  },
-  {
-    enforce: 'pre',
-    test: /\.js$/,
-    use: 'eslint-loader',
-    exclude: [
-      /node_modules/,
-      /bower_components/,
-      /dist/,
-      /cdap_dist/,
-      /common_dist/,
-      /wrangler_dist/
     ]
   },
   {
@@ -116,18 +117,23 @@ var rules = [
   }
 ];
 var webpackConfig = {
+  mode,
   context: __dirname + '/app/login',
   entry: {
-    'login': ['babel-polyfill', './login.js']
+    'login': ['@babel/polyfill', './login.js']
   },
   module: {
     rules
   },
   stats: {
-    chunks: false
+    chunks: false,
+    chunkModules: false
+  },
+  optimization: {
+    splitChunks: false
   },
   output: {
-    filename: './[name].js',
+    filename: '[name].js',
     path: __dirname + '/login_dist/login_assets',
     publicPath: '/login_assets/'
   },
@@ -142,20 +148,21 @@ if (mode === 'production') {
         '__DEVTOOLS__': false
       },
     }),
-    new webpack.optimize.UglifyJsPlugin({
-      compress: {
+    new UglifyJsPlugin({
+      uglifyOptions: {
+        ie8: false,
+        compress: {
           warnings: false
+        },
+        output: {
+          comments: false,
+          beautify: false,
+        }
       }
     })
   );
   webpackConfig = Object.assign({}, webpackConfig, {
     plugins
-  });
-}
-
-if (mode !== 'production') {
-  webpackConfig = Object.assign({}, webpackConfig, {
-    devtool: 'source-map'
   });
 }
 
