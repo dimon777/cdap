@@ -152,6 +152,26 @@ export default class Header extends Component {
     return false;
   };
 
+  renderRulesEngineLink(rulesengineUrl) {
+    let hideRulesEngine = objectQuery(window, 'CDAP_UI_THEME', 'features', 'rules-engine') === 'false';
+    if (hideRulesEngine) {
+      return null;
+    }
+
+    return (
+      <li className={classnames({
+        'active': this.isRulesEnginedActive()
+      })}>
+          <NavLinkWrapper
+            isNativeLink={this.props.nativeLink}
+            to={this.props.nativeLink ? `/cdap${rulesengineUrl}` : rulesengineUrl}
+          >
+            {T.translate(`features.Navbar.rulesmgmt`)}
+          </NavLinkWrapper>
+      </li>
+    );
+  }
+
   render() {
     let baseCDAPURL = `/ns/${this.state.currentNamespace}`;
     let rulesengineUrl = `${baseCDAPURL}/rulesengine`;
@@ -224,16 +244,7 @@ export default class Header extends Component {
               {T.translate(`features.Navbar.MMDS`)}
             </NavLinkWrapper>
           </li>
-          <li className={classnames({
-            'active': this.isRulesEnginedActive()
-          })}>
-              <NavLinkWrapper
-                isNativeLink={this.props.nativeLink}
-                to={this.props.nativeLink ? `/cdap${rulesengineUrl}` : rulesengineUrl}
-              >
-                {T.translate(`features.Navbar.rulesmgmt`)}
-              </NavLinkWrapper>
-          </li>
+          {this.renderRulesEngineLink(rulesengineUrl)}
           <li className={classnames({'active': location.pathname.indexOf('metadata') !== -1})}>
             <MetadataDropdown />
           </li>
